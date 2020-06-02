@@ -4,7 +4,7 @@
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::pedantic))]
 
-pub mod err;
+mod err;
 pub mod internal;
 
 pub use err::Error;

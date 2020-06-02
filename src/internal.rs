@@ -193,7 +193,7 @@ impl KcApi {
 
     /// Send data to be processed.
     /// # Errors
-    /// Same as write() system call
+    /// Same as sendmsg() system call
     pub fn send_data_with_option(
         &self,
         iv: Option<&[u8]>,
@@ -201,7 +201,7 @@ impl KcApi {
         dir: Option<Direction>,
         data: &[u8],
         more_data: bool,
-    ) -> Result<(), Error> {
+    ) -> Result<usize, Error> {
         let mut message: Vec<socket::ControlMessage> = Vec::new();
         #[allow(unused_assignments)]
         let (mut aad_len, mut direction) = (0, 0);
@@ -217,24 +217,24 @@ impl KcApi {
             message.push(socket::ControlMessage::AlgSetOp(&direction));
         }
         let flags = if more_data {
-            socket::MsgFlags::from_bits_truncate(libc::MSG_MORE)
+            unsafe { socket::MsgFlags::from_bits_unchecked(libc::MSG_MORE) }
         } else {
             socket::MsgFlags::empty()
         };
 
-        socket::sendmsg(
+        let r = socket::sendmsg(
             self.opfd,
             &[nix::sys::uio::IoVec::from_slice(data)],
             message.as_slice(),
             flags,
             None,
         )?;
-        Ok(())
+        Ok(r)
     }
 
     /// Send data to be processed.
     /// # Errors
-    /// Same as write() system call
+    /// Same as send() system call
     pub fn send_data(&self, data: &[u8], more_data: bool) -> Result<usize, Error> {
         let flags = if more_data {
             unsafe { socket::MsgFlags::from_bits_unchecked(libc::MSG_MORE) }
@@ -426,6 +426,23 @@ mod tests {
 
         cip.set_option(Some(&[0_u8; 16]), None, Some(Direction::Encrypt))?;
         assert_eq!(len / 2, cip.send_data(&zero[..len / 2], true)?);
+        assert_eq!(len / 2, cip.send_data(&zero[len / 2..], false)?);
+        let read_res = cip.read(&mut dst_spl);
+        assert!(read_res.is_ok());
+        assert_eq!(len, read_res.unwrap());
+
+        assert_eq!(dst, dst_spl);
+
+        assert_eq!(
+            len / 2,
+            cip.send_data_with_option(
+                Some(&[0_u8; 16]),
+                None,
+                Some(Direction::Encrypt),
+                &zero[..len / 2],
+                true
+            )?
+        );
         assert_eq!(len / 2, cip.send_data(&zero[len / 2..], false)?);
         let read_res = cip.read(&mut dst_spl);
         assert!(read_res.is_ok());
