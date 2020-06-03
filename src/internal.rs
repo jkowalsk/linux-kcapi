@@ -76,6 +76,24 @@ pub enum DataPos {
     Last,
 }
 
+impl Into<nix::fcntl::SpliceFFlags> for DataPos {
+    fn into(self) -> nix::fcntl::SpliceFFlags {
+        match self {
+            DataPos::More => nix::fcntl::SpliceFFlags::SPLICE_F_MORE,
+            DataPos::Last => nix::fcntl::SpliceFFlags::empty(),
+        }
+    }
+}
+
+impl Into<socket::MsgFlags> for DataPos {
+    fn into(self) -> socket::MsgFlags {
+        match self {
+            DataPos::More => unsafe { socket::MsgFlags::from_bits_unchecked(libc::MSG_MORE) },
+            DataPos::Last => socket::MsgFlags::empty(),
+        }
+    }
+}
+
 /// Entry struct to linux kernel crypto api
 pub struct KcApi {
     fd: RawFd,
@@ -203,7 +221,6 @@ impl KcApi {
     /// Send data to be processed.
     /// # Errors
     /// Same as sendmsg() system call
-    #[allow(clippy::needless_pass_by_value)]
     pub fn send_data_with_option(
         &self,
         iv: Option<&[u8]>,
@@ -226,17 +243,12 @@ impl KcApi {
             direction = d.into();
             message.push(socket::ControlMessage::AlgSetOp(&direction));
         }
-        let flags = if more_data == DataPos::More {
-            unsafe { socket::MsgFlags::from_bits_unchecked(libc::MSG_MORE) }
-        } else {
-            socket::MsgFlags::empty()
-        };
 
         let r = socket::sendmsg(
             self.opfd,
             &[nix::sys::uio::IoVec::from_slice(data)],
             message.as_slice(),
-            flags,
+            more_data.into(),
             None,
         )?;
         Ok(r)
@@ -245,30 +257,19 @@ impl KcApi {
     /// Send data to be processed.
     /// # Errors
     /// Same as send() system call
-    #[allow(clippy::needless_pass_by_value)]
     pub fn send_data(&self, data: &[u8], more_data: DataPos) -> Result<usize, Error> {
-        let flags = if more_data == DataPos::More {
-            unsafe { socket::MsgFlags::from_bits_unchecked(libc::MSG_MORE) }
-        } else {
-            socket::MsgFlags::empty()
-        };
-        let r = socket::send(self.opfd, data, flags)?;
+        let r = socket::send(self.opfd, data, more_data.into())?;
         Ok(r)
     }
 
     /// Send data to be processed.
     /// # Errors
     /// Any returned by pipe(), vmsplice() by splice() system call
-    #[allow(clippy::needless_pass_by_value)]
     pub fn send_data_no_copy(&self, data: &[u8], more_data: DataPos) -> Result<usize, Error> {
         let mut osize = 0;
         let (pipe0, pipe1) = unistd::pipe()?;
 
-        let flag = if more_data == DataPos::More {
-            nix::fcntl::SpliceFFlags::SPLICE_F_MORE
-        } else {
-            nix::fcntl::SpliceFFlags::empty()
-        };
+        let flag = more_data.into();
 
         // kernel processes input data with max size of one page
         let mut chunks = data.chunks(*PAGE_SIZE).peekable();
