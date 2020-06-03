@@ -6,5 +6,6 @@
 
 mod err;
 pub mod internal;
+pub mod random;
 
 pub use err::Error;
