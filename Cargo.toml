@@ -1,8 +1,13 @@
 [package]
 name = "linux-kcapi"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Julien Kowalski <kowalski.julien@gmail.com>"]
 edition = "2018"
+license = "ISC"
+description = "Tools for using crypto operation from the linux kernel"
+readme = "Readme.md"
+categories = ["cryptography", "os::unix-apis"]
+repository = "https://github.com/jkowalsk/linux-kcapi"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
