@@ -67,6 +67,15 @@ impl Into<c_int> for Direction {
     }
 }
 
+/// Whether this respresents the last message or not
+#[derive(Debug, Clone, PartialEq)]
+pub enum DataPos {
+    /// There is more messages to send  
+    More,
+    /// Last message to send
+    Last,
+}
+
 /// Entry struct to linux kernel crypto api
 pub struct KcApi {
     fd: RawFd,
@@ -194,13 +203,14 @@ impl KcApi {
     /// Send data to be processed.
     /// # Errors
     /// Same as sendmsg() system call
+    #[allow(clippy::needless_pass_by_value)]
     pub fn send_data_with_option(
         &self,
         iv: Option<&[u8]>,
         aad: Option<u32>,
         dir: Option<Direction>,
         data: &[u8],
-        more_data: bool,
+        more_data: DataPos,
     ) -> Result<usize, Error> {
         let mut message: Vec<socket::ControlMessage> = Vec::new();
         #[allow(unused_assignments)]
@@ -216,7 +226,7 @@ impl KcApi {
             direction = d.into();
             message.push(socket::ControlMessage::AlgSetOp(&direction));
         }
-        let flags = if more_data {
+        let flags = if more_data == DataPos::More {
             unsafe { socket::MsgFlags::from_bits_unchecked(libc::MSG_MORE) }
         } else {
             socket::MsgFlags::empty()
@@ -235,8 +245,9 @@ impl KcApi {
     /// Send data to be processed.
     /// # Errors
     /// Same as send() system call
-    pub fn send_data(&self, data: &[u8], more_data: bool) -> Result<usize, Error> {
-        let flags = if more_data {
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn send_data(&self, data: &[u8], more_data: DataPos) -> Result<usize, Error> {
+        let flags = if more_data == DataPos::More {
             unsafe { socket::MsgFlags::from_bits_unchecked(libc::MSG_MORE) }
         } else {
             socket::MsgFlags::empty()
@@ -248,11 +259,12 @@ impl KcApi {
     /// Send data to be processed.
     /// # Errors
     /// Any returned by pipe(), vmsplice() by splice() system call
-    pub fn send_data_no_copy(&self, data: &[u8], more_data: bool) -> Result<usize, Error> {
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn send_data_no_copy(&self, data: &[u8], more_data: DataPos) -> Result<usize, Error> {
         let mut osize = 0;
         let (pipe0, pipe1) = unistd::pipe()?;
 
-        let flag = if more_data {
+        let flag = if more_data == DataPos::More {
             nix::fcntl::SpliceFFlags::SPLICE_F_MORE
         } else {
             nix::fcntl::SpliceFFlags::empty()
@@ -354,12 +366,12 @@ mod tests {
 
         // error shall occur if no direction  is set
         cip.init()?;
-        cip.send_data(&zero, false)?;
+        cip.send_data(&zero, DataPos::Last)?;
         assert!(cip.read(&mut dst).is_err());
 
         // if set, shall be ok
         cip.set_option(None, None, Some(Direction::Encrypt))?;
-        cip.send_data(&zero, false)?;
+        cip.send_data(&zero, DataPos::Last)?;
         assert!(cip.read(&mut dst).is_ok());
 
         // dst shall be non zero
@@ -385,7 +397,7 @@ mod tests {
         // iov split at block size ok
         zero.resize(long_len, 0);
         dst.resize(long_len, 0);
-        cip.send_data(&zero, false)?;
+        cip.send_data(&zero, DataPos::Last)?;
         let read_res = cip.read(&mut dst);
         assert!(read_res.is_ok());
         assert_eq!(long_len, read_res.unwrap());
@@ -393,7 +405,7 @@ mod tests {
         // iov not split at block size
         zero.resize(16, 0);
         dst.resize(16, 0);
-        assert_eq!(16, cip.send_data(&zero, false).unwrap());
+        assert_eq!(16, cip.send_data(&zero, DataPos::Last).unwrap());
         let read_res = cip.read(&mut dst);
         assert!(read_res.is_ok());
         assert_eq!(16, read_res.unwrap());
@@ -419,14 +431,14 @@ mod tests {
         zero.resize(len, 0);
         dst.resize(len, 0);
         dst_spl.resize(len, 0);
-        assert_eq!(len, cip.send_data(&zero, false)?);
+        assert_eq!(len, cip.send_data(&zero, DataPos::Last)?);
         let read_res = cip.read(&mut dst);
         assert!(read_res.is_ok());
         assert_eq!(len, read_res.unwrap());
 
         cip.set_option(Some(&[0_u8; 16]), None, Some(Direction::Encrypt))?;
-        assert_eq!(len / 2, cip.send_data(&zero[..len / 2], true)?);
-        assert_eq!(len / 2, cip.send_data(&zero[len / 2..], false)?);
+        assert_eq!(len / 2, cip.send_data(&zero[..len / 2], DataPos::More)?);
+        assert_eq!(len / 2, cip.send_data(&zero[len / 2..], DataPos::Last)?);
         let read_res = cip.read(&mut dst_spl);
         assert!(read_res.is_ok());
         assert_eq!(len, read_res.unwrap());
@@ -440,10 +452,10 @@ mod tests {
                 None,
                 Some(Direction::Encrypt),
                 &zero[..len / 2],
-                true
+                DataPos::More
             )?
         );
-        assert_eq!(len / 2, cip.send_data(&zero[len / 2..], false)?);
+        assert_eq!(len / 2, cip.send_data(&zero[len / 2..], DataPos::Last)?);
         let read_res = cip.read(&mut dst_spl);
         assert!(read_res.is_ok());
         assert_eq!(len, read_res.unwrap());
@@ -471,14 +483,20 @@ mod tests {
         zero.resize(len, 0);
         dst.resize(len, 0);
         dst_spl.resize(len, 0);
-        assert_eq!(len, cip.send_data(&zero, false)?);
+        assert_eq!(len, cip.send_data(&zero, DataPos::Last)?);
         let read_res = cip.read(&mut dst);
         assert!(read_res.is_ok());
         assert_eq!(len, read_res.unwrap());
 
         cip.set_option(Some(&[0_u8; 16]), None, Some(Direction::Encrypt))?;
-        assert_eq!(len / 2, cip.send_data_no_copy(&zero[..len / 2], true)?);
-        assert_eq!(len / 2, cip.send_data_no_copy(&zero[len / 2..], false)?);
+        assert_eq!(
+            len / 2,
+            cip.send_data_no_copy(&zero[..len / 2], DataPos::More)?
+        );
+        assert_eq!(
+            len / 2,
+            cip.send_data_no_copy(&zero[len / 2..], DataPos::Last)?
+        );
         let read_res = cip.read(&mut dst_spl);
         assert!(read_res.is_ok());
         assert_eq!(len, read_res.unwrap());
@@ -504,7 +522,7 @@ mod tests {
 
         zero.resize(long_len, 0);
         dst.resize(long_len, 0);
-        assert_eq!(long_len, cip.send_data(&zero, false)?);
+        assert_eq!(long_len, cip.send_data(&zero, DataPos::Last)?);
         let read_res = cip.read(&mut dst);
         assert!(read_res.is_ok());
         assert_eq!(long_len, read_res.unwrap());
@@ -528,7 +546,7 @@ mod tests {
 
         zero.resize(long_len, 0);
         dst.resize(long_len, 0);
-        assert_eq!(long_len, cip.send_data_no_copy(&zero, false)?);
+        assert_eq!(long_len, cip.send_data_no_copy(&zero, DataPos::Last)?);
         let read_res = cip.read(&mut dst);
         assert!(read_res.is_ok());
         assert_eq!(long_len, read_res.unwrap());
@@ -561,7 +579,7 @@ mod tests {
 
         for _ in 0..4096 {
             let now = SystemTime::now();
-            cip.send_data_no_copy(&zero.0, false)?;
+            cip.send_data_no_copy(&zero.0, DataPos::Last)?;
             cip.read(&mut dst)?;
             duration += now.elapsed().unwrap().as_micros()
         }
@@ -584,7 +602,7 @@ mod tests {
 
         for _ in 0..4096 {
             let now = SystemTime::now();
-            cip.send_data(&zero.0, false)?;
+            cip.send_data(&zero.0, DataPos::Last)?;
             cip.read(&mut dst)?;
             duration += now.elapsed().unwrap().as_micros()
         }
