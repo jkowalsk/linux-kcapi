@@ -404,13 +404,17 @@ mod tests {
   use super::*;
   const MAX_PAGES: usize = 16;
 
+  fn init() {
+    let _ = env_logger::builder().is_test(true).try_init();
+  }
+
   #[test]
-  fn new() -> Result<(), Error> {
-    let _ = env_logger::try_init();
-    let _ = KcApi::new("rng", "stdrng")?;
+  fn new() {
+    init();
+    let good = KcApi::new("rng", "stdrng");
     let bad = KcApi::new("badtype", "stdrng");
+    assert!(good.is_ok());
     assert!(bad.is_err());
-    Ok(())
   }
 
   #[test]
@@ -424,6 +428,7 @@ mod tests {
 
   #[test]
   fn init_close() -> Result<(), Error> {
+    init();
     let mut rng = KcApi::new("rng", "stdrng")?;
 
     assert!(rng.finish().is_err());
@@ -434,6 +439,7 @@ mod tests {
 
   #[test]
   fn set_key() -> Result<(), Error> {
+    init();
     let mut rng = KcApi::new("rng", "stdrng")?;
     let mut dst = [0_u8; 16];
     rng.init()?;
@@ -449,6 +455,7 @@ mod tests {
 
   #[test]
   fn read() -> Result<(), Error> {
+    init();
     let mut rng = KcApi::new("rng", "stdrng")?;
     let zero = [0_u8; MAX_TEST_READ_LEN];
     // for tests, rng must be seeded
@@ -465,6 +472,7 @@ mod tests {
 
   #[test]
   fn set_option() -> Result<(), Error> {
+    init();
     let mut cip = KcApi::new("aead", "gcm(aes)")?;
     let zero = [0_u8; 32];
     let mut dst = [0_u8; 32];
@@ -490,6 +498,7 @@ mod tests {
 
   #[test]
   fn write() -> Result<(), Error> {
+    init();
     let mut cip = KcApi::new("skcipher", "ctr(aes)")?;
     let mut zero = Vec::new();
 
@@ -523,6 +532,7 @@ mod tests {
 
   #[test]
   fn more_data() -> Result<(), Error> {
+    init();
     let mut cip = KcApi::new("skcipher", "ctr(aes)")?;
     let mut zero = Vec::new();
 
@@ -575,6 +585,7 @@ mod tests {
 
   #[test]
   fn more_data_zero_copy() -> Result<(), Error> {
+    init();
     let mut cip = KcApi::new("skcipher", "ctr(aes)")?;
     let mut zero = Vec::new();
 
@@ -616,6 +627,7 @@ mod tests {
 
   #[test]
   fn write_long() -> Result<(), Error> {
+    init();
     let mut cip = KcApi::new("skcipher", "ctr(aes)")?;
     let mut zero = Vec::new();
 
@@ -640,6 +652,7 @@ mod tests {
 
   #[test]
   fn send_data_no_copy() -> Result<(), Error> {
+    init();
     let mut cip = KcApi::new("skcipher", "ctr(aes)")?;
     let mut zero = Vec::new();
 
@@ -673,7 +686,9 @@ mod tests {
   use std::time::SystemTime;
 
   #[test]
+  #[ignore]
   fn bench_send_data_no_copy() -> Result<(), Error> {
+    init();
     let mut cip = KcApi::new("skcipher", "ctr(aes)")?;
     let zero = new_aligned();
     let mut dst = [0; 32];
@@ -697,6 +712,7 @@ mod tests {
 
   #[test]
   fn bench_write() -> Result<(), Error> {
+    init();
     let mut cip = KcApi::new("skcipher", "ctr(aes)")?;
     let zero = new_aligned();
     let mut dst = [0; 32];

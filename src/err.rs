@@ -3,7 +3,6 @@
 use std::error;
 use std::fmt;
 
-use log;
 pub use nix::errno::Errno;
 
 #[derive(Debug, PartialEq)]
@@ -30,11 +29,9 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {
   fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-    match self {
-      _ => None, // Generic error or this module error, underlying cause isn't tracked.
-    }
+    None
   }
-}
+} 
 
 impl From<nix::Error> for Error {
   fn from(e: nix::Error) -> Self {
@@ -61,13 +58,7 @@ impl Into<rand_core::Error> for Error {
     let r = unsafe { NonZeroU32::new_unchecked(0xFFFF_FFFF) };
 
     match self {
-      Error::Sys(e) => {
-        if let Some(err) = NonZeroU32::new(e as u32) {
-          rand_core::Error::from(err)
-        } else {
-          rand_core::Error::from(r)
-        }
-      }
+      Error::Sys(e) =>  NonZeroU32::new(e as u32).map_or_else(|| rand_core::Error::from(r), rand_core::Error::from),
       _ => rand_core::Error::from(r),
     }
   }

@@ -6,6 +6,7 @@
 
 mod err;
 pub mod internal;
-pub mod random;
+mod random;
 
 pub use err::Error;
+pub use random::{Rng, RngType};
