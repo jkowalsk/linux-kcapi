@@ -119,7 +119,7 @@ impl RngType {
 ///
 /// ```
 /// # use linux_kcapi::Error;
-/// use linux_kcapi::random::{RngType, Rng};
+/// use linux_kcapi::{RngType, Rng};
 ///
 /// # fn get_random_bytes() -> Result<(), Error> {
 /// #     let seed = [0_u8; 32];
