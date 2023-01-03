@@ -1,6 +1,6 @@
 [package]
 name = "linux-kcapi"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Julien Kowalski <kowalski.julien@gmail.com>"]
 edition = "2018"
 license = "ISC"
@@ -17,15 +17,20 @@ rand_trait = ["rand_core"]
 
 [dependencies]
 libc = "0.2" 
-nix = "0.19"
+nix = "0.26"
 log = "0.4"
 lazy_static = "1.4"
 
+#[dependencies.nix]
+#version = "0.26"
+#default-features = false
+#features = ["socket", "uio"]
+
 [dependencies.rand_core]
-version = "0.5"
+version = "0.6"
 default-features = false
 features = ["alloc"]
 optional = true
 
 [dev-dependencies]
-env_logger="0.8"
+env_logger="0.10"
